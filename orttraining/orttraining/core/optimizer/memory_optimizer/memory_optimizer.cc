@@ -50,6 +50,31 @@ bool SetSeedForDropoutNode(Node& node) {
   return false;
 }
 
+bool SetRequireGradsForForwardPythonOpNode(Node& node) {
+  if (graph_utils::IsSupportedOptypeVersionAndDomain(node, "PythonOp", {1}, kMSDomain)) {
+    auto training_mode_attr = graph_utils::GetNodeAttribute(node, "training_mode");
+    if (training_mode_attr == nullptr) {
+      node.ClearAttribute("training_mode");
+    }
+
+    node.AddAttribute("training_mode", static_cast<int64_t>(0));  // Let forward node does not maintain infor for backward.
+
+    // auto input_requires_grads_attr = graph_utils::GetNodeAttribute(node, "input_requires_grads");
+    // if (input_requires_grads_attr == nullptr) {
+    //   return false;
+    // }
+
+    // const auto& input_requires_grads_ints = input_requires_grads_attr->ints();
+    // // Set all zero for input_requires_grads attribute.
+    // std::vector<int64_t> input_requires_grads(input_requires_grads_ints.size(), 0);
+    // node.ClearAttribute("input_requires_grads");
+    // node.AddAttribute("input_requires_grads", input_requires_grads);
+    return true;
+  }
+
+  return false;
+}
+
 }  // namespace
 
 Status MemoryOptimizer::ParseOptimizationConfigFromString(const std::string& memory_optimizer_config,
@@ -71,7 +96,7 @@ bool MemoryOptimizer::ModifyGraph(Graph& graph,
                                   const InlinedHashMap<NodeIndex, ptrdiff_t>&
                                       node_index_to_its_order_in_topological_sort_map,
                                   const InlinedHashMap<const Node*, InlinedVector<size_t>>&
-                                      candidate_output_args_map,
+                                  /*candidate_output_args_map*/,
                                   const logging::Logger& logger,
                                   ptrdiff_t boundary_op_order_in_topological_sort,
                                   Node* node,
@@ -100,45 +125,60 @@ bool MemoryOptimizer::ModifyGraph(Graph& graph,
     } else {
       ORT_THROW("unsupported optimization type found.");
     }
+
+    if (replacement_node_ptr == nullptr) {
+      LOGS(logger, WARNING) << "Failed to create recompute node for node " << node->Name() << "(" << node->OpType() << ").";
+      return false;
+    } else {
+      LOGS(logger, WARNING) << "Recompute subgraph end node " << replacement_node_ptr->Name() << "(" << replacement_node_ptr->OpType()
+                            << ") is created for node " << node->Name() << "(" << node->OpType() << ").";
+    }
+
     ORT_ENFORCE(replacement_node_ptr);
 
     graph_is_modified = true;
 
-    for (size_t output_index : candidate_output_args_map.at(node)) {
-      // Collect output edges (connecting to backward ops), to remove.
-      std::vector<graph_utils::GraphEdge> output_edges;
-      for (auto it = node->OutputEdgesBegin(), end = node->OutputEdgesEnd(); it != end; ++it) {
-        size_t src_output_idx = static_cast<size_t>(it->GetSrcArgIndex());
-        if (src_output_idx != output_index) {
-          continue;
-        }
+    // for (size_t output_index : candidate_output_args_map.at(node)) {
+    // Collect output edges (connecting to backward ops), to remove.
+    std::vector<graph_utils::GraphEdge> output_edges;
+    for (auto it = node->OutputEdgesBegin(), end = node->OutputEdgesEnd(); it != end; ++it) {
+      // size_t src_output_idx = static_cast<size_t>(it->GetSrcArgIndex());
+      // if (src_output_idx != output_index) {
+      //   continue;
+      // }
 
-        auto tid = node_index_to_its_order_in_topological_sort_map.find(it->GetNode().Index());
-        // It is possible the consumer node is newly added as the recompute node, so we need a check here.
-        // For those kinds of ops, we can treat them as backward ops.
-        if (tid == node_index_to_its_order_in_topological_sort_map.end() ||
-            !IsForwardPassOperator(node_index_to_its_order_in_topological_sort_map.at(tid->first),
-                                   boundary_op_order_in_topological_sort)) {
-          // Remove the edge only connecting to backward op.
-          output_edges.push_back(graph_utils::GraphEdge::CreateGraphEdge(*node, *it, false));
-        }
-      }
-
-      if (!output_edges.empty()) {
-        // Remove the output edges of the node first
-        graph_utils::GraphEdge::RemoveGraphEdges(graph, output_edges);
-
-        // Create connections between the replacement node and the outgoing nodes.
-        for (const auto& output_edge : output_edges) {
-          graph.RemoveConsumerNode(node->MutableOutputDefs()[output_index]->Name(), node);
-
-          // Add new edge connecting the input with the output nodes directly.
-          // This also updates the destination node's input node args
-          graph.AddEdge(replacement_node_ptr->Index(), output_edge.dst_node, static_cast<int>(output_index),
-                        output_edge.dst_arg_index);
-        }
+      auto tid = node_index_to_its_order_in_topological_sort_map.find(it->GetNode().Index());
+      // It is possible the consumer node is newly added as the recompute node, so we need a check here.
+      // For those kinds of ops, we can treat them as backward ops.
+      if (tid == node_index_to_its_order_in_topological_sort_map.end() ||
+          !IsForwardPassOperator(node_index_to_its_order_in_topological_sort_map.at(tid->first),
+                                 boundary_op_order_in_topological_sort)) {
+        // Remove the edge only connecting to backward op.
+        // std::cout << "Remove output edge of node " << node->Name() << " connected to " << it->GetNode().Name() << std::endl;
+        output_edges.push_back(graph_utils::GraphEdge::CreateGraphEdge(*node, *it, false));
       }
     }
+
+    if (!output_edges.empty()) {
+      // graph_utils::GraphEdge::RemoveGraphEdges(graph, output_edges);
+
+      // Create connections between the replacement node and the outgoing nodes.
+      for (const auto& output_edge : output_edges) {
+        // Remove the output edges of the node first
+        graph.RemoveEdge(output_edge.src_node,
+                         output_edge.dst_node,
+                         output_edge.src_arg_index,
+                         output_edge.dst_arg_index);
+
+        graph.RemoveConsumerNode(node->MutableOutputDefs()[output_edge.src_arg_index]->Name(), node);
+
+        // Add new edge connecting the input with the output nodes directly.
+        // This also updates the destination node's input node args
+        graph.AddEdge(replacement_node_ptr->Index(), output_edge.dst_node, static_cast<int>(output_edge.src_arg_index),
+                      output_edge.dst_arg_index);
+      }
+    }
+    // }
   }
 
   return graph_is_modified;
@@ -250,6 +290,8 @@ Status MemoryOptimizer::CreateRecomputeGraph(Graph& graph,
     // TODO: if there is more optimization types like offload added, we will add a corresponding check
     // whether the outputs already be offloaded or not.
     if (graph.GetNodeArg(graph_utils::RecomputeName(node_to_duplicate->MutableOutputDefs()[0]->Name())) != nullptr) {
+      std::cout << "Node " << node_to_duplicate->Name() << "(" << node_to_duplicate->OpType()
+                << ") has been recomputed, skip." << std::endl;
       continue;
     }
 
@@ -311,6 +353,12 @@ Status MemoryOptimizer::CreateRecomputeGraph(Graph& graph,
                     static_cast<int>(j));
 
       graph.AddConsumerNode(input_arg->Name(), &recompute_node);
+    }
+
+    bool input_require_grads_reset = SetRequireGradsForForwardPythonOpNode(*node_to_duplicate);
+    if (input_require_grads_reset) {
+      std::cout << "Set input require grads for Node " << node_to_duplicate->Name() << "(" << node_to_duplicate->OpType()
+                << ").";
     }
   }
 
