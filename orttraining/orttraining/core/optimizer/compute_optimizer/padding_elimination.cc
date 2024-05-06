@@ -396,25 +396,25 @@ Status PaddingElimination::ApplyImpl(Graph& graph, bool& modified, int graph_lev
       if (outputNodeCount != 1) {
         continue;
       }
-      auto embedding_output_node = graph.GetNode(node.OutputNodesBegin()->Index());
-      if (embedding_output_node == nullptr ||
-          !graph_utils::IsSupportedOptypeVersionAndDomain(*embedding_output_node, "PythonOp", {1}, kMSDomain) ||
-          static_cast<std::string>(embedding_output_node->GetAttributes().at("func_name").s()) !=
+      Node* embedding_input_node = graph.GetMutableProducerNode(node.MutableInputDefs()[1]->Name());
+      if (embedding_input_node == nullptr ||
+          !graph_utils::IsSupportedOptypeVersionAndDomain(*embedding_input_node, "PythonOp", {1}, kMSDomain) ||
+          static_cast<std::string>(embedding_input_node->GetAttributes().at("func_name").s()) !=
               kFlagPaddingEliminationFuncName) {
         LOG_DEBUG_INFO(logger, "not find PythonOp of flagPaddingElimination after embedding node");
         continue;
       }
-      if (graph_utils::CanRemoveNode(graph, *embedding_output_node, logger)) {
-        if (graph_utils::RemoveNode(graph, *embedding_output_node)) {
+      if (graph_utils::CanRemoveNode(graph, *embedding_input_node, logger)) {
+        if (graph_utils::RemoveNode(graph, *embedding_input_node)) {
           modified = true;
         } else {
-          LOG_DEBUG_INFO(logger, "Failed to remove node " + embedding_output_node->Name() +
-                                     "(" + embedding_output_node->OpType() + ")");
+          LOG_DEBUG_INFO(logger, "Failed to remove node " + embedding_input_node->Name() +
+                                     "(" + embedding_input_node->OpType() + ")");
           continue;
         }
       } else {
-        LOG_DEBUG_INFO(logger, "Can not remove node " + embedding_output_node->Name() +
-                                   "(" + embedding_output_node->OpType() + ")");
+        LOG_DEBUG_INFO(logger, "Can not remove node " + embedding_input_node->Name() +
+                                   "(" + embedding_input_node->OpType() + ")");
         continue;
       }
       const ONNX_NAMESPACE::TensorProto* padding_initializer =

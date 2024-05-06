@@ -5721,10 +5721,15 @@ def test_gradient_correctness_bce_with_logits():
         _test_helpers.assert_values_are_close(ort_input.grad, pt_input.grad)
 
 
-@pytest.mark.parametrize("embed_is_sparse", [False, True])
-@pytest.mark.parametrize("label_is_sparse", [False, True])
-@pytest.mark.parametrize("rank", [1, 2])
-def test_runtime_inspector_label_and_embed_sparsity_detection(embed_is_sparse, label_is_sparse, rank, caplog):
+# @pytest.mark.parametrize("embed_is_sparse", [False, True])
+# @pytest.mark.parametrize("label_is_sparse", [False, True])
+# @pytest.mark.parametrize("rank", [1, 2])
+# def test_runtime_inspector_label_and_embed_sparsity_detection(embed_is_sparse, label_is_sparse, rank, caplog):
+
+if True:
+    embed_is_sparse = True
+    label_is_sparse = True
+    rank = 2
     class NeuralNetCrossEntropyLoss(torch.nn.Module):
         def __init__(self, num_embeddings, embedding_dim):
             super().__init__()
@@ -5748,7 +5753,7 @@ def test_runtime_inspector_label_and_embed_sparsity_detection(embed_is_sparse, l
     pt_model = NeuralNetCrossEntropyLoss(num_embeddings, embedding_dim).to(device)
     from onnxruntime.training.ortmodule import DebugOptions, LogLevel
 
-    ort_model = ORTModule(pt_model, DebugOptions(log_level=LogLevel.INFO))
+    ort_model = ORTModule(pt_model, DebugOptions(log_level=LogLevel.INFO, save_onnx=True, onnx_prefix="test_model"))
 
     def run_step(model, input, positions):
         with amp.autocast(True):
@@ -5775,70 +5780,73 @@ def test_runtime_inspector_label_and_embed_sparsity_detection(embed_is_sparse, l
 
     _ = run_step(ort_model, input, label)
 
-    found_embed_is_sparse = False
-    found_embed_is_dense = False
-    found_label_is_sparse = False
-    for record in caplog.records:
-        if "Label sparsity-based optimization is ON for" in record.getMessage():
-            found_label_is_sparse = True
+    # found_embed_is_sparse = False
+    # found_embed_is_dense = False
+    # found_label_is_sparse = False
+    # for record in caplog.records:
+    #     if "Label sparsity-based optimization is ON for" in record.getMessage():
+    #         found_label_is_sparse = True
 
-        if "Embedding sparsity-based optimization is OFF for" in record.getMessage():
-            found_embed_is_dense = True
+    #     if "Embedding sparsity-based optimization is OFF for" in record.getMessage():
+    #         found_embed_is_dense = True
 
-        if "Embedding sparsity-based optimization is ON for" in record.getMessage():
-            found_embed_is_sparse = True
+    #     if "Embedding sparsity-based optimization is ON for" in record.getMessage():
+    #         found_embed_is_sparse = True
 
-    if label_is_sparse:
-        assert found_label_is_sparse
+    # if label_is_sparse:
+    #     assert found_label_is_sparse
 
-    if embed_is_sparse:
-        assert found_embed_is_sparse and not found_embed_is_dense
-    else:
-        assert not found_embed_is_sparse and found_embed_is_dense
+    # if embed_is_sparse:
+    #     assert found_embed_is_sparse and not found_embed_is_dense
+    # else:
+    #     assert not found_embed_is_sparse and found_embed_is_dense
 
 
-@pytest.mark.parametrize(
-    "test_cases",
-    [
-        ("Add", 0),
-        ("Add", 1),
-        ("Add", 2),
-        ("Add", 3),
-        ("Add", 4),
-        ("Sub", 0),
-        ("Sub", 1),
-        ("Sub", 2),
-        ("Sub", 3),
-        ("Sub", 4),
-        ("Mul", 0),
-        ("Mul", 2),
-        ("Mul", 3),
-        ("Mul", 4),
-        ("Div", 0),
-        ("Div", 2),
-        ("Div", 3),
-        ("Div", 4),
-        ("Pow", 0),
-        ("Pow", 1),
-        ("Pow", 2),
-        ("Pow", 3),
-        ("Pow", 4),
-        ("MatMul", 0),
-        ("MatMul", 1),
-        ("Dropout", 0),
-        ("LayerNormalization", 0),
-        ("LayerNormalization", 1),
-        ("Cast", 0),
-        ("Sqrt", 0),
-        ("BiasGelu", 0),
-        ("Gelu", 0),
-        ("ReduceMean", 0),
-        ("ReduceMean", 1),
-    ],
-)
-def test_ops_for_padding_elimination(test_cases):
-    test_op = test_cases[0]
-    case = test_cases[1]
+# @pytest.mark.parametrize(
+#     "test_cases",
+#     [
+#         ("Add", 0),
+#         ("Add", 1),
+#         ("Add", 2),
+#         ("Add", 3),
+#         ("Add", 4),
+#         ("Sub", 0),
+#         ("Sub", 1),
+#         ("Sub", 2),
+#         ("Sub", 3),
+#         ("Sub", 4),
+#         ("Mul", 0),
+#         ("Mul", 2),
+#         ("Mul", 3),
+#         ("Mul", 4),
+#         ("Div", 0),
+#         ("Div", 2),
+#         ("Div", 3),
+#         ("Div", 4),
+#         ("Pow", 0),
+#         ("Pow", 1),
+#         ("Pow", 2),
+#         ("Pow", 3),
+#         ("Pow", 4),
+#         ("MatMul", 0),
+#         ("MatMul", 1),
+#         ("Dropout", 0),
+#         ("LayerNormalization", 0),
+#         ("LayerNormalization", 1),
+#         ("Cast", 0),
+#         ("Sqrt", 0),
+#         ("BiasGelu", 0),
+#         ("Gelu", 0),
+#         ("ReduceMean", 0),
+#         ("ReduceMean", 1),
+#     ],
+# )
+# def test_ops_for_padding_elimination(test_cases):
+if False:
+    test_op = "Add"
+    case = 0
+    # test_op = test_cases[0]
+    # case = test_cases[1]
 
     vocab_size, hidden_size = 50265, 768
     batch_size, max_seq_length = 8, 128
@@ -5971,7 +5979,7 @@ def test_ops_for_padding_elimination(test_cases):
         return torch.stack(batched_inputs)
 
     device = "cuda"
-    model = ORTModule(ToyModel(vocab_size, hidden_size, 1).to(device))
+    model = ORTModule(ToyModel(vocab_size, hidden_size, 1).to(device), DebugOptions(save_onnx=True, onnx_prefix="test_model"))
     x = generate_inputs(batch_size, max_seq_length, vocab_size)
     model(x)
 

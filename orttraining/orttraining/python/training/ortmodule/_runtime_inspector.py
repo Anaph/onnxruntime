@@ -59,6 +59,7 @@ class RuntimeInspector:
         self.input_density_ob: Union[InputDensityObserver, None] = None
         self.memory_ob = MemoryObserver(module, self._logger, training)
         self._embedding_module_to_padding_density_map = {}
+        self._sceloss_module_to_ignore_density_map = {}
 
     def enable_input_inspector(self, model: ModelProto, user_input_names: List[str]) -> None:
         """Initialize input inspector from the given ONNX model and user input names.

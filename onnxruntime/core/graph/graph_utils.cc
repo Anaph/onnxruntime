@@ -524,12 +524,14 @@ bool RemoveNode(Graph& graph, Node& node) {
 
   // Note: Node does not produce any graph outputs, and only a single output is used.
 
+  std::cout<<"yangyangyang input edge count is "<<node.GetInputEdgesCount()<<std::endl;
   // If there is a single input edge from another node (initializers are not connected with edges to nodes)
   if (node.GetInputEdgesCount() == 1) {
     // remove the node and wire its incoming node to its outgoing node/s
     return RemoveNodeWithSingleNodeInSingleUsedOutput(graph, node);
   }
 
+  std::cout<<"yangyangyang input defs size:"<<node.InputDefs().size()<<std::endl;
   // single input def so replace node with that
   if (node.InputDefs().size() == 1) {
     return ReplaceNodeWithInitializer(graph, node, *node.MutableInputDefs()[0]);
