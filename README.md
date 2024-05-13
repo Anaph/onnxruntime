@@ -59,3 +59,12 @@ or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any addi
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## UCLIBC ARM32 BUILD
+1. Source toolchain
+2. Correct file ./cmake/linux_arm32_crosscompile_toolchain.cmake
+```
+mkdir build && cd build
+cmake   -DCMAKE_SYSTEM_NAME=Linux   -DCMAKE_SYSTEM_PROCESSOR=armv7   -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON   -Donnxruntime_BUILD_SHARED_LIB=ON   -Donnxruntime_BUILD_UNIT_TESTS=OFF   -DCMAKE_BUILD_TYPE=Release -Donnxruntime_BUILD_SHARED_LIB=ON -DCMAKE_TOOLCHAIN_FILE=../cmake/linux_arm32_crosscompile_toolchain.cmake -D__UCLIBC__=ON -D__ARM_NEON=ON -D__ARM_FEATURE_I8MM=ON -D__ARM_FEATURE_SVE=ON -D__ARM_FEATURE_BF16=ON ../cmake
+make -j $(nproc)
+```

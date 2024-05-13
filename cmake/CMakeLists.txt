@@ -526,7 +526,14 @@ file (STRINGS "${REPO_ROOT}/VERSION_NUMBER" ORT_VERSION)
 find_package(Threads)
 # On Windows we directly use Windows APIs to do the job
 # Android NDK doesn't provide the iconv lib.
-if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+
+if (__UCLIBC__)
+    message("Using uClibc")
+else()
+    message("Not using uClibc")
+endif()
+
+if(NOT WIN32 AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android" AND NOT ${__UCLIBC__})
   find_package(Iconv REQUIRED)
   set(ICONV_LIB Iconv::Iconv)
 endif()

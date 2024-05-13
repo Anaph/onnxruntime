@@ -13,8 +13,52 @@
 #endif
 
 #if defined(CPUIDINFO_ARCH_ARM)
-
+#ifndef __UCLIBC__
 #include <sys/auxv.h>
+#else
+#ifdef __ARM_NEON
+#pragma message("USE ARM NEON!")
+bool has_arm_neon_dot() {
+    return true;
+}
+#else
+#pragma message("NOT USE ARM NEON!")
+bool has_arm_neon_dot() {
+    return false;
+}
+#endif
+
+#ifdef __ARM_FEATURE_I8MM
+bool has_arm_neon_i8mm() {
+    return true;
+}
+#else
+bool has_arm_neon_i8mm() {
+    return false;
+}
+#endif
+
+#ifdef __ARM_FEATURE_SVE
+bool has_arm_sve_i8mm() {
+    return true;
+}
+#else
+bool has_arm_sve_i8mm() {
+    return false;
+}
+#endif
+
+#ifdef __ARM_FEATURE_BF16
+bool has_arm_neon_bf16() {
+    return true;
+}
+#else
+bool has_arm_neon_bf16() {
+    return false;
+}
+#endif
+
+#endif	//  uclibc
 #include <asm/hwcap.h>
 // N.B. Support building with older versions of asm/hwcap.h that do not define
 // this capability bit.
@@ -175,6 +219,7 @@ void CPUIDInfo::ArmLinuxInit() {
     }
   }
 #else
+#ifndef __UCLIBC__
   pytorch_cpuinfo_init_ = false;
   has_arm_neon_dot_ = ((getauxval(AT_HWCAP) & HWCAP_ASIMDDP) != 0);
   has_fp16_ |= has_arm_neon_dot_;
@@ -183,6 +228,14 @@ void CPUIDInfo::ArmLinuxInit() {
   has_arm_sve_i8mm_ = ((getauxval(AT_HWCAP2) & HWCAP2_SVEI8MM) != 0);
 
   has_arm_neon_bf16_ = ((getauxval(AT_HWCAP2) & HWCAP2_BF16) != 0);
+#else
+  pytorch_cpuinfo_init_ = false;
+  has_arm_neon_dot_ = has_arm_neon_dot();
+  has_fp16_ |= has_arm_neon_dot_;
+  has_arm_neon_i8mm_ = has_arm_neon_i8mm();
+  has_arm_sve_i8mm_ = has_arm_sve_i8mm();
+  has_arm_neon_bf16_ = has_arm_neon_bf16();
+#endif
 #endif
 }
 
